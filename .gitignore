@@ -5,3 +5,4 @@
 .notes/
 **/**-todo.md
 .idea/**
+__pycache__

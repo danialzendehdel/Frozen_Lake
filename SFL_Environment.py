@@ -54,37 +54,59 @@ class CustomSFLEnv(gym.Env):
         return self.state, {}
 
     def step(self, action):
-        """
-        Processes an action and returns the new state, reward, and status.
-
-        Parameters:
-            action: The action taken by the agent.
-
-        Returns:
-            observation: The new state after taking the action.
-            reward: The reward received for taking the action.
-            done: A boolean indicating if the episode has ended.
-            truncated: A boolean indicating if the episode was truncated.
-            info: A dictionary containing additional information.
-        """
         assert self.action_space.contains(action), f"{action} is not a valid action"
 
         self.step_count += 1
         action_probability = {
-            0: [0, 1, 3],   # Left: intended left, or slips to down or up
-            1: [1, 0, 2],   # Down: intended down, or slips to left or right
-            2: [2, 1, 3],   # Right: intended right, or slips to down or up
-            3: [3, 0, 2]    # Up: intended up, or slips to left or right
+            0: [0, 1, 3],
+            1: [1, 0, 2],
+            2: [2, 1, 3],
+            3: [3, 0, 2]
         }
 
-        probs = [1/3, 1/3, 1/3]
+        probs = [1 / 3, 1 / 3, 1 / 3]
 
         possible_actions = action_probability[action]
         actual_action = random.choices(possible_actions, weights=probs, k=1)[0]
 
-        # Update position
-        row = self.state // self.grid_size
-        col = self.state % self.grid_size
+        new_state = self.compute_next_state(self.state, actual_action)
+
+        reward, done = self.get_reward(new_state)
+        self.state = new_state
+
+        truncated = False  # No truncation logic implemented
+        info = {
+            'step_count': self.step_count,
+            'actual_action': actual_action  # Optional
+        }
+
+        return self.state, reward, done, truncated, info
+
+    def env_dynamic(self):
+        P = {}
+        action_probabilities = {
+            0: [0, 1, 3],
+            1: [1, 0, 2],
+            2: [2, 1, 3],
+            3: [3, 0, 2]
+        }
+        transition_probs = 1 / 3
+
+        for s in range(self.observation_space.n):
+            P[s] = {}
+            for a in range(self.action_space.n):
+                P[s][a] = []
+                possible_actions = action_probabilities[a]
+                for actual_action in possible_actions:
+                    new_state = self.compute_next_state(s, actual_action)
+                    reward, done = self.get_reward(new_state)
+                    P[s][a].append((transition_probs, new_state, reward, done))
+        return P
+
+    def compute_next_state(self, s, actual_action):
+        # Compute next state from state s and action actual_action
+        row = s // self.grid_size
+        col = s % self.grid_size
 
         if actual_action == 0:  # Left
             col = max(0, col - 1)
@@ -95,9 +117,10 @@ class CustomSFLEnv(gym.Env):
         elif actual_action == 3:  # Up
             row = max(0, row - 1)
 
-        new_state = row * self.grid_size + col
-        self.state = new_state
+        next_state = row * self.grid_size + col
+        return next_state
 
+    def get_reward(self, new_state):
         if new_state in self.holes:
             reward = 0
             done = True
@@ -107,14 +130,7 @@ class CustomSFLEnv(gym.Env):
         else:
             reward = 0
             done = False
-
-        truncated = False  # No truncation logic implemented
-        info = {
-            'step_count': self.step_count,
-            'actual_action': actual_action  # Optional
-        }
-
-        return self.state, reward, done, truncated, info
+        return reward, done
 
     def render(self, mode='human'):
         if self.screen is None:
